@@ -174,12 +174,13 @@ const ChatRoom = () => {
                     variant="contained" 
                     color="primary" 
                     onClick={sendMessage} 
-                    endIcon={<SendIcon sx={{ color: 'white' }}/>}
+                    // endIcon={<SendIcon sx={{ color: 'white' }}/>}
                     disabled={isConnecting}
                 >
-                    <Typography variant="button" sx={{ color: 'white' }}>
+                    {/* <Typography variant="button" sx={{ color: 'white' }}>
                         Send
-                    </Typography>
+                    </Typography> */}
+                    <SendIcon sx={{ color: 'white' }}/>
                 </Button>
                 <Button variant="outlined" onClick={() => setShowPicker(!showPicker)} disabled={isConnecting}>
                     <EmojiEmotionsIcon />
