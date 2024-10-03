@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, TextField, Button, Typography, Avatar, Paper, List, ListItem, ListItemText, ListItemAvatar, useTheme } from '@mui/material';
+import { Box, TextField, Button, Typography, Avatar, Paper, List, ListItem, ListItemText, ListItemAvatar, useTheme, Backdrop, CircularProgress } from '@mui/material';
 import { styled } from '@mui/system';
 import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions';
 import SendIcon from '@mui/icons-material/Send';
@@ -33,7 +33,7 @@ const MessageItem = styled(ListItem)(({ theme, isCurrentUser, highlightColor }) 
 }));
 
 const ChatRoom = () => {
-    const appTheme = useTheme()
+    const appTheme = useTheme();
 
     const [username, setUsername] = useState("");
     const [message, setMessage] = useState("");
@@ -41,11 +41,16 @@ const ChatRoom = () => {
     const [typingUser, setTypingUser] = useState(null);
     const [ws, setWs] = useState(null);
     const [showPicker, setShowPicker] = useState(false);
+    const [isConnecting, setIsConnecting] = useState(true);
     const messageRef = useRef(null);
     const chatWindowRef = useRef(null);
 
     useEffect(() => {
         const socket = new WebSocket(config.baseURL);
+
+        socket.onopen = () => {
+            setIsConnecting(false);
+        };
 
         socket.onmessage = (event) => {
             const messageData = JSON.parse(event.data);
@@ -57,6 +62,10 @@ const ChatRoom = () => {
                 setChat((prevChat) => [...prevChat, { ...messageData, timestamp: formattedTimestamp }]);
                 setTypingUser(null);
             }
+        };
+
+        socket.onclose = () => {
+            setIsConnecting(true);
         };
 
         setWs(socket);
@@ -78,7 +87,7 @@ const ChatRoom = () => {
     };
 
     const sendMessage = () => {
-        if (ws && message && username) {
+        if (ws && message && username && ws.readyState === WebSocket.OPEN) {
             const msg = { username, message, timestamp: new Date().toISOString(), typing: false };
             ws.send(JSON.stringify(msg));
             setMessage("");
@@ -93,7 +102,7 @@ const ChatRoom = () => {
 
     const handleChange = (e) => {
         setMessage(e.target.value);
-        if (ws && username) {
+        if (ws && username && ws.readyState === WebSocket.OPEN) {
             const typingMessage = { username, message: "", timestamp: "", typing: true };
             ws.send(JSON.stringify(typingMessage));
         }
@@ -117,6 +126,7 @@ const ChatRoom = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 margin="normal"
+                disabled={isConnecting}
             />
 
             <ChatWindow ref={chatWindowRef}>
@@ -129,7 +139,6 @@ const ChatRoom = () => {
                     {chat.map((msg, index) => (
                         <MessageItem key={index} alignItems="flex-start" isCurrentUser={msg.username === username} highlightColor={appTheme.palette.secondary.main}>
                             <ListItemAvatar>
-                                {/* https://www.dicebear.com/how-to-use/http-api/ */}
                                 <Avatar src={`https://api.dicebear.com/9.x/pixel-art/svg?seed=${msg.username}`} />
                             </ListItemAvatar>
                             <ListItemText
@@ -159,13 +168,20 @@ const ChatRoom = () => {
                     value={message}
                     onChange={handleChange}
                     onKeyDown={handleKeyDown}
+                    disabled={isConnecting}
                 />
-                <Button variant="contained" color="primary" onClick={sendMessage} endIcon={<SendIcon sx={{ color: 'white' }}/>}>
+                <Button 
+                    variant="contained" 
+                    color="primary" 
+                    onClick={sendMessage} 
+                    endIcon={<SendIcon sx={{ color: 'white' }}/>}
+                    disabled={isConnecting}
+                >
                     <Typography variant="button" sx={{ color: 'white' }}>
                         Send
                     </Typography>
                 </Button>
-                <Button variant="outlined" onClick={() => setShowPicker(!showPicker)}>
+                <Button variant="outlined" onClick={() => setShowPicker(!showPicker)} disabled={isConnecting}>
                     <EmojiEmotionsIcon />
                 </Button>
             </InputArea>
@@ -174,6 +190,17 @@ const ChatRoom = () => {
                     <Picker data={data} onEmojiSelect={addEmoji} />
                 </Box>
             )}
+            <Backdrop
+                sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
+                open={isConnecting}
+            >
+                <Box display="flex" flexDirection="column" alignItems="center">
+                    <CircularProgress color="inherit" />
+                    <Typography variant="h6" style={{ marginTop: 16 }}>
+                        Connecting to server...
+                    </Typography>
+                </Box>
+            </Backdrop>
         </StyledPaper>
     );
 };
