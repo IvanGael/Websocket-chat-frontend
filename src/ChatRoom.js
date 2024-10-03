@@ -73,7 +73,7 @@ const ChatRoom = () => {
         return () => {
             socket.close();
         };
-    }, [username]);
+    }, []);
 
     useEffect(() => {
         if (chatWindowRef.current) {
