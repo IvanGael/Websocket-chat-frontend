@@ -1,8 +1,10 @@
 import { useState, useMemo } from "react";
+import { Route, Routes } from 'react-router-dom';
 import ChatRoom from "./ChatRoom";
+import Home from "./Home";
 import { ThemeProvider } from '@mui/material/styles';
 import GetTheme from "./CustomTheme";
- 
+
 function App() {
   const [mode, setMode] = useState('light');
 
@@ -18,7 +20,10 @@ function App() {
 
   return (
     <ThemeProvider theme={theme}>
-      <ChatRoom/>
+      <Routes>
+        <Route path='/' element={<Home />} />
+        <Route path='/chat' element={<ChatRoom />} />
+      </Routes>
     </ThemeProvider>
   );
 }
