@@ -170,24 +170,24 @@ const ChatRoom = () => {
                     onKeyDown={handleKeyDown}
                     disabled={isConnecting}
                 />
-                <Button 
-                    variant="contained" 
-                    color="primary" 
-                    onClick={sendMessage} 
+                <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={sendMessage}
                     // endIcon={<SendIcon sx={{ color: 'white' }}/>}
                     disabled={isConnecting}
                 >
                     {/* <Typography variant="button" sx={{ color: 'white' }}>
                         Send
                     </Typography> */}
-                    <SendIcon sx={{ color: 'white' }}/>
+                    <SendIcon sx={{ color: 'white' }} />
                 </Button>
                 <Button variant="outlined" onClick={() => setShowPicker(!showPicker)} disabled={isConnecting}>
                     <EmojiEmotionsIcon />
                 </Button>
             </InputArea>
             {showPicker && (
-                <Box mt={2} sx={{position: 'absolute'}}>
+                <Box mt={2} sx={{ position: 'absolute' }}>
                     <Picker data={data} onEmojiSelect={addEmoji} />
                 </Box>
             )}
@@ -196,9 +196,9 @@ const ChatRoom = () => {
                 open={isConnecting}
             >
                 <Box display="flex" flexDirection="column" alignItems="center">
-                    <CircularProgress color="inherit" />
+                    <CircularProgress color="primary" />
                     <Typography variant="h6" style={{ marginTop: 16 }}>
-                        Connecting to server...
+                        Attempting to establish a connection with the server...
                     </Typography>
                 </Box>
             </Backdrop>
