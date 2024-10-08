@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     AppBar, Toolbar, Box, TextField, Button, Typography, Avatar, Paper, List, ListItem, ListItemText,
     ListItemAvatar, Backdrop, CircularProgress, Snackbar, IconButton, Slide, Grid, stack, Divider, useMediaQuery, useTheme
@@ -67,19 +67,23 @@ const ChatRoom = () => {
     const [isConnecting, setIsConnecting] = useState(true);
     const [userCount, setUserCount] = useState(0);
     const [roomId, setRoomId] = useState("");
-    const [showSnackbar, setShowSnackbar] = useState(false);
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState("");
     const [joinRoomId, setJoinRoomId] = useState("");
     const messageRef = useRef(null);
     const chatWindowRef = useRef(null);
     const [typingUsers, setTypingUsers] = useState({});
     const typingTimeoutRef = useRef({});
+    const [error, setError] = useState(null);
+    const [isReconnecting, setIsReconnecting] = useState(false);
+    const reconnectTimeoutRef = useRef(null);
 
     useEffect(() => {
         createRoom();
 
         return () => {
             if (ws) ws.close();
+            if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         };
     }, []);
 
@@ -111,16 +115,15 @@ const ChatRoom = () => {
             const data = await response.json();
             setRoomId(data.roomID);
         } catch (error) {
-            setSnackbarMessage('An unexpected error appear while attempting to connect with the room. Please try again.');
-            setShowSnackbar(true);
+            handleError('Failed to create room. Please try again.', error);
         }
     };
 
     const joinRoom = () => {
         if (joinRoomId.trim()) {
-            if(!isValidRoomID(joinRoomId)){
+            if (!isValidRoomID(joinRoomId)) {
                 setSnackbarMessage("Invalid Room ID. Couldn't connect!");
-                setShowSnackbar(true);
+                setSnackbarOpen(true);
             } else {
                 setRoomId(joinRoomId);
             }
@@ -130,19 +133,29 @@ const ChatRoom = () => {
     const isValidRoomID = (id) => {
         const pattern = /^[a-z]{3}-[a-z]{4}-[a-z]{3}\?hs=[1-9]\d{2}$/;
         return pattern.test(id);
-    }    
+    }
 
     const connectWebSocket = (roomId) => {
         const socket = new WebSocket(`${config.baseURL}/ws?room=${roomId}`);
 
         socket.onopen = () => {
             setIsConnecting(false);
-            setSnackbarMessage('Connected to chat room.');
-            setShowSnackbar(true);
+            setIsReconnecting(false);
+            setError(null);
+            showSnackbar('Connected to chat room.');
         };
 
         socket.onmessage = async function (event) {
-            const messageData = JSON.parse(event.data);
+            let messageData;
+            try {
+                messageData = JSON.parse(event.data);
+            } catch (error) {
+                // handleError('A client have left the room','');
+                // messageData = {};
+                // reconnect(roomId);
+                // setUserCount(userCount - 1);
+                window.location.reload();
+            }
 
             if (messageData.type === 'user_count') {
                 const response = await fetch(`${config.baseURL2}/decrypt`, {
@@ -183,33 +196,73 @@ const ChatRoom = () => {
             }
         };
 
-        socket.onclose = () => {
+        socket.onclose = (event) => {
             setIsConnecting(true);
-            setSnackbarMessage('Disconnected from chat room. Attempting to reconnect...');
-            setShowSnackbar(true);
+            if (event.wasClean) {
+                showSnackbar('Disconnected from chat room.');
+            } else {
+                handleError('Connection lost. Attempting to reconnect...', new Error('WebSocket connection closed unexpectedly'));
+                reconnect(roomId);
+            }
+            setChat([]);
+        };
+
+        socket.onerror = (error) => {
+            handleError('WebSocket error occurred', error);
         };
 
         setWs(socket);
     };
 
+    const reconnect = useCallback((roomId) => {
+        setIsReconnecting(true);
+        reconnectTimeoutRef.current = setTimeout(() => {
+            connectWebSocket(roomId);
+        }, 5000); // Try to reconnect every 5 seconds
+    }, [connectWebSocket]);
+
+    const handleError = (userMessage, error) => {
+        console.error(error);
+        setError(userMessage);
+        showSnackbar(userMessage);
+    };
+
+    const showSnackbar = (message) => {
+        setSnackbarMessage(message);
+        setSnackbarOpen(true);
+    };
+
     const sendMessage = async () => {
-        const response = await fetch(`${config.baseURL2}/encrypt`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ message }),
-        });
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            handleError('Unable to send message. Please check your connection.', new Error('WebSocket not open'));
+            return;
+        }
 
-        const data = await response.json();
-        const encryptedMessage = data.encrypted;
+        try {
+            const response = await fetch(`${config.baseURL2}/encrypt`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message }),
+            });
 
-        const msg = {
-            type: 'chat',
-            message: encryptedMessage,
-        };
-        ws.send(JSON.stringify(msg));
-        setMessage("");
+            if (!response.ok) {
+                throw new Error('Failed to encrypt message');
+            }
+
+            const data = await response.json();
+            const encryptedMessage = data.encrypted;
+
+            const msg = {
+                type: 'chat',
+                message: encryptedMessage,
+            };
+            ws.send(JSON.stringify(msg));
+            setMessage("");
+        } catch (error) {
+            handleError('Failed to send message. Please try again.', error);
+        }
     };
 
     const handleKeyDown = (e) => {
@@ -242,7 +295,7 @@ const ChatRoom = () => {
         navigator.clipboard.writeText(text)
             .then(() => {
                 setSnackbarMessage('Room ID successfully copied to the clipboard.');
-                setShowSnackbar(true);
+                setSnackbarOpen(true);
             });
     }
 
@@ -429,29 +482,38 @@ const ChatRoom = () => {
                 </Grid>
 
                 <Snackbar
-                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }} // Moved to top-center
-                    open={showSnackbar}
+                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+                    open={snackbarOpen}
                     autoHideDuration={2000}
                     TransitionComponent={Slide}
-                    onClose={() => setShowSnackbar(false)}
+                    onClose={() => setSnackbarOpen(false)}
                     message={snackbarMessage}
                     action={
-                        <IconButton size="small" color="inherit" onClick={() => setShowSnackbar(false)}>
+                        <IconButton size="small" color="inherit" onClick={() => setSnackbarOpen(false)}>
                             <CloseIcon fontSize="small" />
                         </IconButton>
                     }
                 />
 
-                {isConnecting && (
-                    <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1, backgroundColor: 'rgba(0, 0, 0, 0.5)' }} open={isConnecting}>
-                        <Box display="flex" flexDirection="column" alignItems="center">
-                            <CircularProgress color="inherit" />
-                            <Typography variant="h6" style={{ marginTop: 16 }}>
-                                Connecting to chat room...
-                            </Typography>
-                        </Box>
-                    </Backdrop>
-                )}
+                <Backdrop
+                    sx={{
+                        color: '#fff',
+                        zIndex: (theme) => theme.zIndex.drawer + 1,
+                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                        flexDirection: 'column',
+                    }}
+                    open={isConnecting || isReconnecting}
+                >
+                    <CircularProgress color="inherit" />
+                    <Typography variant="h6" style={{ marginTop: 16 }}>
+                        {isReconnecting ? 'Reconnecting to chat room...' : 'Connecting to chat room...'}
+                    </Typography>
+                    {error && (
+                        <Typography variant="body2" color="error" style={{ marginTop: 8 }}>
+                            {error}
+                        </Typography>
+                    )}
+                </Backdrop>
             </StyledPaper>
         </>
     );
