@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     AppBar, Toolbar, Box, TextField, Button, Typography, Avatar, Paper, List, ListItem, ListItemText,
-    ListItemAvatar, Backdrop, CircularProgress, Snackbar, IconButton, Slide, Grid, stack, useMediaQuery, useTheme
+    ListItemAvatar, Backdrop, CircularProgress, Snackbar, IconButton, Slide, Grid, stack, Divider, useMediaQuery, useTheme
 } from '@mui/material';
 import { Stack, styled } from '@mui/system';
 import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions';
@@ -10,6 +10,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import NoChattingImg from './assets/no-chatting.png';
 import Grid4x4Icon from '@mui/icons-material/Grid4x4';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import TollIcon from '@mui/icons-material/Toll';
 import Picker from '@emoji-mart/react';
 import data from '@emoji-mart/data';
 import config from './config';
@@ -54,18 +55,6 @@ const MessageItem = styled(ListItem)(({ theme, isCurrentUser }) => ({
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
 }));
 
-
-const StyledToolbar = styled(Toolbar)(({ theme }) => ({
-    alignItems: 'flex-start',
-    paddingTop: theme.spacing(1),
-    paddingBottom: theme.spacing(2),
-    // Override media queries injected by theme.mixins.toolbar
-    '@media all': {
-        minHeight: 128,
-    },
-}));
-
-
 const ChatRoom = () => {
     const appTheme = useTheme();
     const isSmallScreen = useMediaQuery(appTheme.breakpoints.down('sm'));
@@ -85,16 +74,12 @@ const ChatRoom = () => {
     const chatWindowRef = useRef(null);
     const [typingUsers, setTypingUsers] = useState({});
     const typingTimeoutRef = useRef({});
-    const [reconnectAttempts, setReconnectAttempts] = useState(0);
-    const maxReconnectAttempts = 5;
-    const reconnectTimeoutRef = useRef(null);
 
     useEffect(() => {
         createRoom();
 
         return () => {
             if (ws) ws.close();
-            if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         };
     }, []);
 
@@ -133,9 +118,19 @@ const ChatRoom = () => {
 
     const joinRoom = () => {
         if (joinRoomId.trim()) {
-            setRoomId(joinRoomId);
+            if(!isValidRoomID(joinRoomId)){
+                setSnackbarMessage("Invalid Room ID. Couldn't connect!");
+                setShowSnackbar(true);
+            } else {
+                setRoomId(joinRoomId);
+            }
         }
     };
+
+    const isValidRoomID = (id) => {
+        const pattern = /^[a-z]{3}-[a-z]{4}-[a-z]{3}\?hs=[1-9]\d{2}$/;
+        return pattern.test(id);
+    }    
 
     const connectWebSocket = (roomId) => {
         const socket = new WebSocket(`${config.baseURL}/ws?room=${roomId}`);
@@ -144,7 +139,6 @@ const ChatRoom = () => {
             setIsConnecting(false);
             setSnackbarMessage('Connected to chat room.');
             setShowSnackbar(true);
-            setReconnectAttempts(0);
         };
 
         socket.onmessage = async function (event) {
@@ -166,7 +160,15 @@ const ChatRoom = () => {
                     ...prev,
                     [messageData.username]: messageData.typing
                 }));
-            } else {
+            }
+            // else if (messageData.type === 'join') {
+            //     setSnackbarMessage(`${messageData.username} has joined the room.`);
+            //     setShowSnackbar(true);
+            // } else if (messageData.type === 'leave') {
+            //     setSnackbarMessage(`${messageData.username} has left the room.`);
+            //     setShowSnackbar(true);
+            // } 
+            else {
                 const response = await fetch(`${config.baseURL2}/decrypt`, {
                     method: 'POST',
                     headers: {
@@ -185,17 +187,6 @@ const ChatRoom = () => {
             setIsConnecting(true);
             setSnackbarMessage('Disconnected from chat room. Attempting to reconnect...');
             setShowSnackbar(true);
-
-            if (reconnectAttempts < maxReconnectAttempts) {
-                reconnectTimeoutRef.current = setTimeout(() => {
-                    setReconnectAttempts(prev => prev + 1);
-                    connectWebSocket(roomId);
-                }, 5000);
-            } else {
-                setSnackbarMessage('Failed to reconnect after multiple attempts. Please try rejoining the room.');
-                setShowSnackbar(true);
-                setIsConnecting(false);
-            }
         };
 
         setWs(socket);
@@ -303,7 +294,12 @@ const ChatRoom = () => {
                         )}
 
                         <Typography variant="body2" fontWeight="bold" sx={{ color: 'white' }}>
-                            Users Online : {userCount}
+                            <Stack direction={'row'} spacing={1}>
+                                <TollIcon sx={{ color: 'white' }} />
+                                <Typography variant="body2" fontWeight="bold" sx={{ color: 'white' }}>
+                                    :  {userCount}
+                                </Typography>
+                            </Stack>
                         </Typography>
                     </Stack>
                 </Toolbar>
@@ -385,6 +381,7 @@ const ChatRoom = () => {
                                     </Box>
                                 )}
                             </ChatWindow>
+                            <Divider />
 
                             <InputArea>
                                 <Button
@@ -432,9 +429,9 @@ const ChatRoom = () => {
                 </Grid>
 
                 <Snackbar
-                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }} // Moved to top-center
                     open={showSnackbar}
-                    autoHideDuration={5000}
+                    autoHideDuration={2000}
                     TransitionComponent={Slide}
                     onClose={() => setShowSnackbar(false)}
                     message={snackbarMessage}
@@ -450,7 +447,7 @@ const ChatRoom = () => {
                         <Box display="flex" flexDirection="column" alignItems="center">
                             <CircularProgress color="inherit" />
                             <Typography variant="h6" style={{ marginTop: 16 }}>
-                                {reconnectAttempts > 0 ? `Reconnecting... Attempt ${reconnectAttempts}/${maxReconnectAttempts}` : 'Connecting to chat room...'}
+                                Connecting to chat room...
                             </Typography>
                         </Box>
                     </Backdrop>
